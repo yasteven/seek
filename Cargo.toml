@@ -1,0 +1,32 @@
+[package]
+name = "seek"
+version = "0.1.1"
+edition = "2021"
+authors = ["Steven E. Elliott see@thefractaltennis.com"]
+description = "A macro utility for generating QUIC-based tokio mpsc channels"
+readme = "README.md"
+repository = "https://github.com/seeya/seek"
+
+# Verified up to stream data type paritiy, haven't stress-tested yet
+
+[lib]
+proc-macro = true
+
+[profile.release]
+opt-level = 'z'  # Optimize for size
+lto = true       # Enable link time optimizations
+
+[dependencies]
+
+# RUST MACRO ECOSYSTEM
+syn = { version = "1.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+# DEBUG AND LOGGING
+log = "0.4"
+env_logger = "0.9"
+
+# DATA MANIPULATION
+serde = { version = "1", features = ["derive"] }
+bincode = "1.3" 
