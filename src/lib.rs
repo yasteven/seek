@@ -176,27 +176,27 @@ pub fn seek(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 let mut pending = None;
                 loop {
                     if requests_closed && setups.is_empty() && pending.is_none() {
-                        // Preserve existing behavior: closing the request mailbox
-                        // stops dialing, while already delivered handles remain usable.
-                        sessions.detach_all();
-                        return Ok(());
+                        break;
                     }
                     tokio::select! {
                         biased;
-                        _ = self.new_connection_sender.closed() => return Err("seek new-connection receiver closed".into()),
+                        _ = self.new_connection_sender.closed() => break,
                         result = sessions.join_next(), if !sessions.is_empty() => {
                             if let Some(Err(error)) = result { log::error!("seek session failed: {error}"); }
                         }
                         permit = self.new_connection_sender.reserve(), if pending.is_some() => {
                             match permit {
-                                Ok(permit) => { permit.send(pending.take().unwrap()); }
-                                Err(_) => return Err("seek new-connection receiver closed".into()),
+                                Ok(permit) => {
+                                    let (prepared, id) = pending.take().unwrap();
+                                    permit.send(__seek_start_connection(prepared, id, &mut sessions));
+                                }
+                                Err(_) => break,
                             }
                         }
                         result = setups.join_next(), if !setups.is_empty() && pending.is_none() => {
                             match result {
                                 Some(Ok(Ok((prepared, id)))) => {
-                                    pending = Some(__seek_start_connection(prepared, id, &mut sessions));
+                                    pending = Some((prepared, id));
                                 }
                                 Some(Ok(Err(error))) => log::warn!("seek connection failed: {error}"),
                                 Some(Err(error)) => log::error!("seek setup task failed: {error}"),
@@ -224,6 +224,12 @@ pub fn seek(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                         }
                     }
                 }
+                // Setup mailboxes control dialing, not published connection lifetimes.
+                // Only published handles have session tasks. Dropping this run's
+                // pending preparations and setups cancels unpublished connections.
+                // Active sessions retain their handle-driven cleanup/cancellation.
+                sessions.detach_all();
+                Ok(())
             }
         }
     };

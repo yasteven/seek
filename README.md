@@ -173,3 +173,19 @@ in completion order; their `c_id` still comes from request order.
 
 Generated code uses Tokio `JoinSet` (Tokio 1.21 or later) and Quinn 0.11. The
 regressions can be run with `cargo test --all-targets -- --nocapture`.
+
+## Client connection lifetime
+
+Client setup channels control dialing and handle delivery. Once a connection
+handle is delivered, the application may drop both setup channels and keep using
+that handle. Closing the new-handle receiver stops dialing normally, cancels
+unpublished preparations, and leaves published sessions running. Closing the
+request sender alone lets submitted connection attempts finish.
+
+Published sessions end on explicit `CancelInfo` cancellation, peer/transport
+failure, or closure of all their application stream directions. Server shutdown
+continues to close its sessions. The wire version and public API are unchanged.
+
+`cargo test --test client_lifetime -- --nocapture` reproduces the connector return
+pattern used by MSTA and USTA's AIHO client, verifies bidirectional Unicode traffic
+after the dialer returns, and checks cancellation and dropped-handle cleanup.
